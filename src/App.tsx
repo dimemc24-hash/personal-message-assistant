@@ -13,6 +13,7 @@ function App() {
   // App state
   const [contacts, setContacts] = useState<Contact[]>([])
   const [occasions, setOccasions] = useState<Occasion[]>([])
+  // eslint-disable-next-line
   const [messages, setMessages] = useState<Message[]>([])
   const [activeTab, setActiveTab] = useState<'generate' | 'contacts' | 'occasions'>('generate')
   

@@ -14,7 +14,6 @@ function App() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [occasions, setOccasions] = useState<Occasion[]>([])
   // eslint-disable-next-line
-  const [messages, setMessages] = useState<Message[]>([])
   const [activeTab, setActiveTab] = useState<'generate' | 'contacts' | 'occasions'>('generate')
   
   // Form states
@@ -48,15 +47,13 @@ function App() {
   const loadData = async () => {
     if (!user) return
 
-    const [contactsRes, occasionsRes, messagesRes] = await Promise.all([
-      supabase.from('contacts').select('*').eq('user_id', user.id).order('name'),
-      supabase.from('occasions').select('*').eq('user_id', user.id).order('date'),
-      supabase.from('messages').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-    ])
+const [contactsRes, occasionsRes] = await Promise.all([
+  supabase.from('contacts').select('*').eq('user_id', user.id).order('name'),
+  supabase.from('occasions').select('*').eq('user_id', user.id).order('date')
+])
 
-    if (contactsRes.data) setContacts(contactsRes.data)
-    if (occasionsRes.data) setOccasions(occasionsRes.data)
-    if (messagesRes.data) setMessages(messagesRes.data)
+if (contactsRes.data) setContacts(contactsRes.data)
+if (occasionsRes.data) setOccasions(occasionsRes.data)
   }
 
   const handleAuth = async (e: React.FormEvent) => {

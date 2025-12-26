@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, type Contact, type Occasion, type Message } from './lib/supabase'
+import { supabase, type Contact, type Occasion } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
 import { Send, Users, Calendar, MessageSquare, LogOut } from 'lucide-react'
 
@@ -13,7 +13,6 @@ function App() {
   // App state
   const [contacts, setContacts] = useState<Contact[]>([])
   const [occasions, setOccasions] = useState<Occasion[]>([])
-  // eslint-disable-next-line
   const [activeTab, setActiveTab] = useState<'generate' | 'contacts' | 'occasions'>('generate')
   
   // Form states
@@ -47,13 +46,13 @@ function App() {
   const loadData = async () => {
     if (!user) return
 
-const [contactsRes, occasionsRes] = await Promise.all([
-  supabase.from('contacts').select('*').eq('user_id', user.id).order('name'),
-  supabase.from('occasions').select('*').eq('user_id', user.id).order('date')
-])
+    const [contactsRes, occasionsRes] = await Promise.all([
+      supabase.from('contacts').select('*').eq('user_id', user.id).order('name'),
+      supabase.from('occasions').select('*').eq('user_id', user.id).order('date')
+    ])
 
-if (contactsRes.data) setContacts(contactsRes.data)
-if (occasionsRes.data) setOccasions(occasionsRes.data)
+    if (contactsRes.data) setContacts(contactsRes.data)
+    if (occasionsRes.data) setOccasions(occasionsRes.data)
   }
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -158,7 +157,7 @@ Return ONLY a JSON array of 3 strings, no other text:
       
       alert(`Message copied to clipboard! Now open your Android Messages app and send to ${contact?.phone_number}`)
       
-      // Reload messages
+      // Reload data
       loadData()
       setGeneratedMessages([])
     } catch (error: any) {

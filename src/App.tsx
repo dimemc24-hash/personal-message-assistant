@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, type Contact, type Occasion, type Message } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
-import { Send, Users, Calendar, MessageSquare, LogOut, Plus, Edit2, Trash2, X } from 'lucide-react'
+import { Send, Users, Calendar, MessageSquare, LogOut, Plus, Edit2, Trash2, X, Smartphone } from 'lucide-react'
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -22,6 +22,7 @@ function App() {
   const [messageStyle, setMessageStyle] = useState<'formal' | 'casual' | 'warm'>('warm')
   const [generatedMessages, setGeneratedMessages] = useState<string[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isSending, setIsSending] = useState(false)
 
   // Contact form states
   const [showContactForm, setShowContactForm] = useState(false)
@@ -128,7 +129,6 @@ function App() {
 
     try {
       if (editingContact) {
-        // Update existing contact
         const { error } = await supabase
           .from('contacts')
           .update({
@@ -142,7 +142,6 @@ function App() {
         if (error) throw error
         alert('Contact updated!')
       } else {
-        // Create new contact
         const { error } = await supabase
           .from('contacts')
           .insert({
@@ -233,12 +232,47 @@ Return ONLY a JSON array of 3 strings, no other text:
     }
   }
 
-  const saveAndSendMessage = async (messageText: string) => {
+  const sendViaSMS = async (messageText: string) => {
     if (!user || !selectedContact) return
 
     const contact = contacts.find(c => c.id === selectedContact)
-    
+    if (!contact) return
+
+    setIsSending(true)
+
     try {
+      // Send SMS via Twilio
+      const accountSid = import.meta.env.VITE_TWILIO_ACCOUNT_SID
+      const authToken = import.meta.env.VITE_TWILIO_AUTH_TOKEN
+      const fromNumber = import.meta.env.VITE_TWILIO_PHONE_NUMBER
+
+      if (!accountSid || !authToken || !fromNumber) {
+        throw new Error('Twilio credentials not configured')
+      }
+
+      // Twilio API call
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${accountSid}:${authToken}`),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            To: contact.phone_number,
+            From: fromNumber,
+            Body: messageText,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to send SMS')
+      }
+
+      // Save to database
       await supabase.from('messages').insert({
         contact_id: selectedContact,
         occasion_id: selectedOccasion || null,
@@ -249,9 +283,37 @@ Return ONLY a JSON array of 3 strings, no other text:
         user_id: user.id
       })
 
+      alert(`📱 Message sent to ${contact.name} (${contact.phone_number})!`)
+      
+      loadData()
+      setGeneratedMessages([])
+    } catch (error: any) {
+      console.error('SMS Error:', error)
+      alert('Error sending SMS: ' + error.message + '\n\nMake sure the number is verified in your Twilio account.')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const copyToClipboard = async (messageText: string) => {
+    if (!user || !selectedContact) return
+
+    const contact = contacts.find(c => c.id === selectedContact)
+    
+    try {
       await navigator.clipboard.writeText(messageText)
       
-      alert(`Message copied to clipboard! Now open your Android Messages app and send to ${contact?.phone_number}`)
+      // Save to database as draft
+      await supabase.from('messages').insert({
+        contact_id: selectedContact,
+        occasion_id: selectedOccasion || null,
+        message_text: messageText,
+        style: messageStyle,
+        status: 'draft',
+        user_id: user.id
+      })
+
+      alert(`Message copied to clipboard for ${contact?.name}!`)
       
       loadData()
       setGeneratedMessages([])
@@ -470,13 +532,23 @@ Return ONLY a JSON array of 3 strings, no other text:
                   {generatedMessages.map((msg, index) => (
                     <div key={index} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
                       <p className="text-gray-700 mb-3 text-sm sm:text-base">{msg}</p>
-                      <button
-                        onClick={() => saveAndSendMessage(msg)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
-                      >
-                        <Send size={18} />
-                        Copy & Send This One
-                      </button>
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => sendViaSMS(msg)}
+                          disabled={isSending}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base disabled:opacity-50"
+                        >
+                          <Smartphone size={18} />
+                          {isSending ? 'Sending...' : 'Send via SMS'}
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(msg)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                        >
+                          <Send size={18} />
+                          Copy Only
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -495,7 +567,10 @@ Return ONLY a JSON array of 3 strings, no other text:
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-semibold text-gray-800 text-sm sm:text-base">{contact?.name}</p>
-                            <p className="text-xs sm:text-sm text-gray-500">{message.sent_at ? formatDate(message.sent_at) : 'Draft'}</p>
+                            <p className="text-xs sm:text-sm text-gray-500">
+                              {message.sent_at ? formatDate(message.sent_at) : 'Draft'} 
+                              {message.status === 'sent' && ' • Sent via SMS'}
+                            </p>
                           </div>
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             message.style === 'formal' ? 'bg-purple-100 text-purple-800' :
